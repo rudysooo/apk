@@ -1,11 +1,11 @@
 <#
  PC Remote - agent Windows
- Écoute des ordres de l'application Android sur le réseau local.
+ Ecoute des ordres de l'application Android sur le reseau local.
 
  Installation (PowerShell administrateur, une seule fois) :
    powershell -ExecutionPolicy Bypass -File agent.ps1 -Install -Token <jeton> -Port 8765
 
- Désinstallation :
+ Desinstallation :
    powershell -ExecutionPolicy Bypass -File agent.ps1 -Uninstall
 #>
 param(
@@ -26,7 +26,7 @@ if ($Uninstall) {
         Where-Object { $_.CommandLine -like '*PcRemoteAgent*agent.ps1*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
     Remove-Item $Dir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Agent désinstallé."
+    Write-Host "Agent desinstalle."
     exit
 }
 
@@ -34,7 +34,7 @@ if ($Install) {
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')) {
         Write-Host "Relance PowerShell en administrateur." -ForegroundColor Red; exit 1
     }
-    if ($Token.Length -lt 8) { Write-Host "Donne un jeton d'au moins 8 caractères (-Token)." -ForegroundColor Red; exit 1 }
+    if ($Token.Length -lt 8) { Write-Host "Donne un jeton d'au moins 8 caracteres (-Token)." -ForegroundColor Red; exit 1 }
 
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
     Copy-Item $PSCommandPath "$Dir\agent.ps1" -Force
@@ -53,7 +53,7 @@ if ($Install) {
     $set     = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 99 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $princ -Settings $set -Force | Out-Null
     Start-ScheduledTask -TaskName $TaskName
-    Write-Host "Agent installé et démarré sur le port $Port." -ForegroundColor Green
+    Write-Host "Agent installe et demarre sur le port $Port." -ForegroundColor Green
     exit
 }
 
