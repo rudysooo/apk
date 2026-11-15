@@ -31,7 +31,7 @@ if ($Uninstall) {
 }
 
 if ($Install) {
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole('Administrator')) {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         Write-Host "Relance PowerShell en administrateur." -ForegroundColor Red; exit 1
     }
     if ($Token.Length -lt 8) { Write-Host "Donne un jeton d'au moins 8 caracteres (-Token)." -ForegroundColor Red; exit 1 }

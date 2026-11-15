@@ -41,6 +41,10 @@ $bytes = New-Object byte[] 12
 [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
 $token = ($bytes | ForEach-Object { $_.ToString("x2") }) -join ""
 & "$PSScriptRoot\agent.ps1" -Install -Token $token -Port $Port
+if (-not (Get-ScheduledTask -TaskName "PcRemoteAgent" -ErrorAction SilentlyContinue)) {
+    Write-Host "[ERREUR] L'agent d'extinction n'a pas pu etre installe. Les infos ci-dessous ne sont pas valables pour l'extinction." -ForegroundColor Red
+    exit 1
+}
 
 # 4. Recap, affiche et enregistre sur le Bureau
 $nom = $env:COMPUTERNAME
