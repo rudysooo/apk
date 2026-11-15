@@ -40,7 +40,7 @@ if ($Install) {
     Copy-Item $PSCommandPath "$Dir\agent.ps1" -Force
     Set-Content -Path "$Dir\config.json" -Value (@{ token = $Token; port = $Port } | ConvertTo-Json)
     # Seuls SYSTEM et les administrateurs peuvent lire le jeton
-    icacls $Dir /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
+    icacls $Dir /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
 
     Remove-NetFirewallRule -DisplayName $FwName -ErrorAction SilentlyContinue
     New-NetFirewallRule -DisplayName $FwName -Direction Inbound -Protocol TCP -LocalPort $Port `
