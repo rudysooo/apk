@@ -80,6 +80,9 @@ while ($listener.IsListening) {
             "shutdown" { Send $ctx 200 "shutdown"; Start-Process shutdown.exe -ArgumentList "/s","/t","3" }
             "restart"  { Send $ctx 200 "restart";  Start-Process shutdown.exe -ArgumentList "/r","/t","3" }
             "lock"     { Send $ctx 200 "lock";     Start-Process rundll32.exe -ArgumentList "user32.dll,LockWorkStation" }
+            "sleep"     { Send $ctx 200 "sleep"; Start-Process powershell.exe -ArgumentList '-NoProfile -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; Start-Sleep 3; [System.Windows.Forms.Application]::SetSuspendState(''Suspend'',$false,$false)"' }
+            "hibernate" { Send $ctx 200 "hibernate"; Start-Process shutdown.exe -ArgumentList "/h" }
+            "cancel"    { Send $ctx 200 "cancel";    Start-Process shutdown.exe -ArgumentList "/a" }
             default    { Send $ctx 404 "unknown" }
         }
     } catch { try { $ctx.Response.Abort() } catch {} }
