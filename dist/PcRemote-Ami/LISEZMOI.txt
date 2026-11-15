@@ -30,6 +30,11 @@ ETAPE 5 - Dans l'appli
    Puis sur la carte du PC : "Configurer l'extinction" > colle le Jeton > Enregistrer.
    Eteins le PC avec "Arreter" (pas Redemarrer), attends 30 secondes, puis appuie sur Allumer.
 
+BONUS - Boutons dans le panneau rapide (centre de controle)
+   Dans l'appli, touche l'icone en haut a droite (a cote du "?") : Android propose d'ajouter
+   "Allumer PC" et "Eteindre PC". Sinon : glisse le panneau vers le bas > crayon (modifier)
+   > ajoute les deux boutons. Ils agissent sur le premier PC de la liste.
+
 Pour retirer l'agent du PC : double-clique sur Desinstaller.bat.
 
 Securite : l'agent n'accepte que les appareils de ton reseau local et seulement avec le Jeton.

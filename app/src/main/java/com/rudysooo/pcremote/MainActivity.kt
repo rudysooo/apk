@@ -99,6 +99,8 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("Mes PC", fontWeight = FontWeight.Bold) },
                 actions = {
+                    val ctx = LocalContext.current
+                    IconButton(onClick = { addTiles(ctx) }) { Icon(Icons.Default.Widgets, "Centre de contrôle") }
                     IconButton(onClick = onGuide) { Icon(Icons.Default.HelpOutline, "Aide") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
@@ -133,6 +135,28 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+fun addTiles(ctx: android.content.Context) {
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+        val sbm = ctx.getSystemService(android.app.StatusBarManager::class.java)
+        runCatching {
+            sbm.requestAddTileService(
+                android.content.ComponentName(ctx, WakeTile::class.java), "Allumer PC",
+                android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.ic_tile_on), ctx.mainExecutor,
+            ) { }
+            sbm.requestAddTileService(
+                android.content.ComponentName(ctx, ShutdownTile::class.java), "Éteindre PC",
+                android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.ic_tile_off), ctx.mainExecutor,
+            ) { }
+        }
+    } else {
+        android.widget.Toast.makeText(
+            ctx,
+            "Glisse le panneau rapide vers le bas, touche le crayon (modifier) puis ajoute « Allumer PC » et « Éteindre PC ».",
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
     }
 }
 
