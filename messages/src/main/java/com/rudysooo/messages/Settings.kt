@@ -20,6 +20,7 @@ class Settings(ctx: Context) {
     var deliveryReports by mutableStateOf(sp.getBoolean("delivery", false)); private set
     var pinned by mutableStateOf(sp.getStringSet("pinned", emptySet())!!.toSet()); private set
     var muted by mutableStateOf(sp.getStringSet("muted", emptySet())!!.toSet()); private set
+    var archived by mutableStateOf(sp.getStringSet("archived", emptySet())!!.toSet()); private set
     var blocked by mutableStateOf(sp.getStringSet("blocked", emptySet())!!.toSet()); private set
 
     val textScale get() = when (textSize) { 0 -> 0.9f; 2 -> 1.15f; else -> 1f }
@@ -42,6 +43,13 @@ class Settings(ctx: Context) {
     fun setMuted(ids: Collection<Long>, on: Boolean) {
         muted = if (on) muted + ids.map { it.toString() } else muted - ids.map { it.toString() }.toSet()
         sp.edit().putStringSet("muted", muted).apply()
+    }
+
+    fun isArchived(threadId: Long) = threadId.toString() in archived
+
+    fun setArchived(ids: Collection<Long>, on: Boolean) {
+        archived = if (on) archived + ids.map { it.toString() } else archived - ids.map { it.toString() }.toSet()
+        sp.edit().putStringSet("archived", archived).apply()
     }
 
     private fun norm(n: String) = n.filter { it.isDigit() }.takeLast(9)

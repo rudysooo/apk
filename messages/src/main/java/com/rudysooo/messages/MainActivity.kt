@@ -37,7 +37,7 @@ sealed interface Screen {
     data object List : Screen
     data object New : Screen
     data object Settings : Screen
-    data class Thread(val threadId: Long, val address: String, val title: String, val draft: String = "") : Screen
+    data class Thread(val threadId: Long, val addresses: kotlin.collections.List<String>, val title: String, val draft: String = "") : Screen
 }
 
 private data class OpenReq(val address: String, val body: String = "")
@@ -131,7 +131,7 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
         if (open != null && smsGranted) {
             val tid = withContext(Dispatchers.IO) { Sms.threadFor(ctx, open.address) }
             val title = withContext(Dispatchers.IO) { Sms.displayName(ctx, open.address) } ?: open.address
-            screen = Screen.Thread(tid, open.address, title, open.body)
+            screen = Screen.Thread(tid, listOf(open.address), title, open.body)
             onOpenHandled()
         }
     }
@@ -151,8 +151,8 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
         Screen.List -> ListScreen(
             settings, convs, loaded, isDefault,
             onRequestDefault = ::requestDefault,
-            onOpen = { screen = Screen.Thread(it.threadId, it.address, it.title) },
-            onOpenHit = { screen = Screen.Thread(it.threadId, it.address, it.name ?: it.address) },
+            onOpen = { screen = Screen.Thread(it.threadId, it.addresses.ifEmpty { listOf(it.title) }, it.title) },
+            onOpenHit = { screen = Screen.Thread(it.threadId, listOf(it.address), it.name ?: it.address) },
             onNew = {
                 if (!contactsGranted) permLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
                 screen = Screen.New
@@ -160,12 +160,12 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
             onSettings = { screen = Screen.Settings },
             onChanged = { version++ },
         )
-        Screen.New -> NewScreen(contactsGranted, onBack = { screen = Screen.List }) { number, name ->
-            screen = Screen.Thread(Sms.threadFor(ctx, number), number, name ?: number)
+        Screen.New -> NewScreen(contactsGranted, onBack = { screen = Screen.List }) { numbers, title ->
+            screen = Screen.Thread(Sms.threadFor(ctx, numbers), numbers, title)
         }
         Screen.Settings -> SettingsScreen(settings, isDefault, ::requestDefault) { screen = Screen.List }
         is Screen.Thread -> ThreadScreen(
-            settings, version, s.threadId, s.address, s.title, s.draft,
+            settings, version, s.threadId, s.addresses, s.title, s.draft,
             onBack = { screen = Screen.List },
             onChanged = { version++ },
         )

@@ -47,6 +47,7 @@ fun ListScreen(
     var hits by remember { mutableStateOf<List<Hit>>(emptyList()) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showArchived by remember { mutableStateOf(false) }
     val selecting = selected.isNotEmpty()
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -56,8 +57,8 @@ fun ListScreen(
         hits = withContext(Dispatchers.IO) { Sms.search(ctx, query.trim()) }
     }
 
-    val sorted = remember(convs, settings.pinned) {
-        convs.sortedWith(compareByDescending<Conv> { settings.isPinned(it.threadId) }.thenByDescending { it.date })
+    val sorted = remember(convs, settings.pinned, settings.archived, showArchived) {
+        convs.filter { settings.isArchived(it.threadId) == showArchived }.sortedWith(compareByDescending<Conv> { settings.isPinned(it.threadId) }.thenByDescending { it.date })
     }
     val shown = if (query.isBlank()) sorted else sorted.filter {
         it.title.contains(query, true) || it.address.contains(query, true)
@@ -78,6 +79,9 @@ fun ListScreen(
                         IconButton({ settings.setPinned(selected, !allPinned); selected = emptySet() }) {
                             Icon(Icons.Default.PushPin, "Épingler")
                         }
+                        IconButton({ settings.setArchived(selected, !showArchived); selected = emptySet() }) {
+                            Icon(if (showArchived) Icons.Default.Unarchive else Icons.Default.Archive, "Archiver")
+                        }
                         IconButton({ settings.setMuted(selected, !allMuted); selected = emptySet() }) {
                             Icon(if (allMuted) Icons.Default.Notifications else Icons.Default.NotificationsOff, "Sourdine")
                         }
@@ -90,8 +94,14 @@ fun ListScreen(
                 )
             } else {
                 LargeTopAppBar(
-                    title = { Text("Messages", fontWeight = FontWeight.Bold) },
-                    actions = { IconButton(onSettings) { Icon(Icons.Default.Settings, "Réglages") } },
+                    title = { Text(if (showArchived) "Archivées" else "Messages", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        if (showArchived) IconButton({ showArchived = false }) { Icon(Icons.Default.ArrowBack, "Retour") }
+                    },
+                    actions = {
+                        if (!showArchived) IconButton({ showArchived = true }) { Icon(Icons.Default.Archive, "Archivées") }
+                        IconButton(onSettings) { Icon(Icons.Default.Settings, "Réglages") }
+                    },
                     scrollBehavior = scroll,
                     colors = TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -144,11 +154,11 @@ fun ListScreen(
                     }
                 }
             }
-            if (loaded && convs.isEmpty()) item {
+            if (loaded && shown.isEmpty() && query.isBlank()) item {
                 Column(Modifier.fillMaxWidth().padding(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.ChatBubbleOutline, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
                     Spacer(Modifier.height(12.dp))
-                    Text("Aucune conversation", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (showArchived) "Aucune conversation archivée" else "Aucune conversation", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             items(shown, key = { it.threadId }) { c ->

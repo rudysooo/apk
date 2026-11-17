@@ -159,9 +159,9 @@ fun SettingsScreen(
 
             Section("À propos") {
                 Row3(
-                    "Messages 1.0",
-                    "SMS uniquement. Les MMS (photos, groupes) et les messages RCS ne sont pas pris en charge : " +
-                        "ils continuent d'arriver dans l'appli de ton opérateur.",
+                    "Messages 1.1",
+                    "SMS et MMS (photos, vidéos, groupes), archivage et envoi programmé. L'envoi des MMS dépend de ton opérateur " +
+                        "et du réglage « données mobiles ». Le RCS n'est pas disponible : Google ne l'autorise que pour sa propre appli et les opérateurs.",
                 )
             }
         }

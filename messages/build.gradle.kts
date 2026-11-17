@@ -10,9 +10,10 @@ android {
     defaultConfig {
         applicationId = "com.rudysooo.messages"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        // La bibliothèque MMS (2017) crée des PendingIntent sans FLAG_IMMUTABLE : incompatible avec targetSdk >= 31.
+        targetSdk = 30
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -38,4 +39,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("com.klinkerapps:android-smsmms:5.2.6")
 }

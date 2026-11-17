@@ -4,8 +4,8 @@ import android.Manifest
 import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.ContentValues
-import android.content.Intent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -13,20 +13,40 @@ import android.provider.ContactsContract
 import android.provider.Telephony
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
+import com.klinker.android.send_message.Message
+import com.klinker.android.send_message.Transaction
+import com.klinker.android.send_message.Settings as MmsSettings
 
 data class Conv(
     val threadId: Long,
-    val address: String,
-    val name: String?,
+    val addresses: List<String>,
+    val title: String,
     val snippet: String,
     val date: Long,
     val unread: Int,
+    val hasAttachment: Boolean,
 ) {
-    val title get() = name ?: address.ifBlank { "Inconnu" }
+    val address get() = addresses.firstOrNull() ?: ""
+    val isGroup get() = addresses.size > 1
+}
+
+class MsgPart(val id: Long, val mime: String, val name: String) {
+    val uri: Uri get() = Uri.parse("content://mms/part/$id")
+    val isImage get() = mime.startsWith("image/")
 }
 
 /** type : 1 reçu, 2 envoyé, 4 en cours d'envoi, 5 échec */
-data class Msg(val id: Long, val body: String, val date: Long, val type: Int, val status: Int = -1) {
+class Msg(
+    val uid: String,
+    val id: Long,
+    val body: String,
+    val date: Long,
+    val type: Int,
+    val status: Int = -1,
+    val mms: Boolean = false,
+    val parts: List<MsgPart> = emptyList(),
+    val sender: String? = null,
+) {
     val incoming get() = type == 1
     val failed get() = type == 5
     val pending get() = type == 4 || type == 6
@@ -59,44 +79,112 @@ object Sms {
         return n
     }
 
-    fun conversations(ctx: Context): List<Conv> {
-        val latest = LinkedHashMap<Long, Conv>()
+    private fun canonicalAddresses(ctx: Context): Map<Long, String> = runCatching {
+        val out = HashMap<Long, String>()
+        ctx.contentResolver.query(Uri.parse("content://mms-sms/canonical-addresses"), arrayOf("_id", "address"), null, null, null)
+            ?.use { while (it.moveToNext()) out[it.getLong(0)] = it.getString(1) ?: "" }
+        out
+    }.getOrDefault(emptyMap())
+
+    private fun unreadCounts(ctx: Context): Map<Long, Int> {
         val unread = HashMap<Long, Int>()
         runCatching {
+            ctx.contentResolver.query(Telephony.Sms.CONTENT_URI, arrayOf("thread_id"), "read=0 AND type=1", null, null)
+                ?.use { while (it.moveToNext()) unread.merge(it.getLong(0), 1, Int::plus) }
+        }
+        runCatching {
+            ctx.contentResolver.query(Telephony.Mms.CONTENT_URI, arrayOf("thread_id"), "read=0 AND msg_box=1", null, null)
+                ?.use { while (it.moveToNext()) unread.merge(it.getLong(0), 1, Int::plus) }
+        }
+        return unread
+    }
+
+    /** Conversations SMS + MMS, groupes compris. */
+    fun conversations(ctx: Context): List<Conv> {
+        val canon = canonicalAddresses(ctx)
+        val unread = unreadCounts(ctx)
+        val out = ArrayList<Conv>()
+        runCatching {
+            val uri = Telephony.Threads.CONTENT_URI.buildUpon().appendQueryParameter("simple", "true").build()
             ctx.contentResolver.query(
-                Telephony.Sms.CONTENT_URI,
-                arrayOf(
-                    Telephony.Sms.THREAD_ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY,
-                    Telephony.Sms.DATE, Telephony.Sms.TYPE, Telephony.Sms.READ,
-                ),
+                uri, arrayOf("_id", "date", "message_count", "recipient_ids", "snippet", "has_attachment"),
                 null, null, "date DESC",
             )?.use { c ->
                 while (c.moveToNext()) {
-                    val tid = c.getLong(0)
-                    if (c.getInt(4) == 1 && c.getInt(5) == 0) unread[tid] = (unread[tid] ?: 0) + 1
-                    if (!latest.containsKey(tid)) {
-                        latest[tid] = Conv(tid, c.getString(1) ?: "", null, c.getString(2) ?: "", c.getLong(3), 0)
-                    }
+                    if (c.getInt(2) <= 0) continue
+                    val addrs = (c.getString(3) ?: "").split(' ').mapNotNull { it.toLongOrNull() }
+                        .mapNotNull { canon[it] }.filter { it.isNotBlank() }
+                    val title = addrs.joinToString(", ") { displayName(ctx, it) ?: it }.ifBlank { "Inconnu" }
+                    val hasAtt = c.getInt(5) == 1
+                    val snippet = (c.getString(4) ?: "").ifBlank { if (hasAtt) "📎 Pièce jointe" else "" }
+                    out += Conv(c.getLong(0), addrs, title, snippet, c.getLong(1), unread[c.getLong(0)] ?: 0, hasAtt)
                 }
             }
         }
-        return latest.values.map { it.copy(name = displayName(ctx, it.address), unread = unread[it.threadId] ?: 0) }
+        return out
     }
 
-    fun messages(ctx: Context, threadId: Long): List<Msg> = runCatching {
+    fun messages(ctx: Context, threadId: Long): List<Msg> {
         val out = ArrayList<Msg>()
+        runCatching {
+            ctx.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE, Telephony.Sms.STATUS),
+                "thread_id=?", arrayOf(threadId.toString()), "date ASC",
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    out += Msg("s${c.getLong(0)}", c.getLong(0), c.getString(1) ?: "", c.getLong(2), c.getInt(3), c.getInt(4))
+                }
+            }
+        }
+        out += mmsMessages(ctx, threadId)
+        return out.sortedBy { it.date }
+    }
+
+    private fun mmsMessages(ctx: Context, threadId: Long): List<Msg> = runCatching {
+        data class Row(val id: Long, val date: Long, val box: Int, val mType: Int, val subject: String)
+        val rows = ArrayList<Row>()
         ctx.contentResolver.query(
-            Telephony.Sms.CONTENT_URI,
-            arrayOf(Telephony.Sms._ID, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE, Telephony.Sms.STATUS),
+            Telephony.Mms.CONTENT_URI, arrayOf("_id", "date", "msg_box", "m_type", "sub"),
             "thread_id=?", arrayOf(threadId.toString()), "date ASC",
         )?.use { c ->
-            while (c.moveToNext()) out += Msg(c.getLong(0), c.getString(1) ?: "", c.getLong(2), c.getInt(3), c.getInt(4))
+            while (c.moveToNext()) rows += Row(c.getLong(0), c.getLong(1) * 1000, c.getInt(2), c.getInt(3), c.getString(4) ?: "")
         }
-        out
+        if (rows.isEmpty()) return@runCatching emptyList<Msg>()
+        val texts = HashMap<Long, StringBuilder>()
+        val parts = HashMap<Long, MutableList<MsgPart>>()
+        ctx.contentResolver.query(
+            Uri.parse("content://mms/part"), arrayOf("_id", "mid", "ct", "text", "name"),
+            "mid IN (${rows.joinToString(",") { it.id.toString() }})", null, null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val mid = c.getLong(1); val ct = c.getString(2) ?: ""
+                when {
+                    ct == "text/plain" -> texts.getOrPut(mid) { StringBuilder() }.append(c.getString(3) ?: "")
+                    ct == "application/smil" -> {}
+                    else -> parts.getOrPut(mid) { ArrayList() } += MsgPart(c.getLong(0), ct, c.getString(4) ?: "")
+                }
+            }
+        }
+        rows.map { r ->
+            val type = when (r.box) { 1 -> 1; 4 -> 4; 5 -> 5; else -> 2 }
+            val sender = if (type == 1) mmsSender(ctx, r.id) else null
+            var body = texts[r.id]?.toString() ?: ""
+            if (r.subject.isNotBlank() && body.isBlank()) body = r.subject
+            if (r.mType == 130) body = "Message multimédia en attente de téléchargement…"
+            Msg("m${r.id}", r.id, body, r.date, type, mms = true, parts = parts[r.id] ?: emptyList(), sender = sender)
+        }
     }.getOrDefault(emptyList())
 
-    fun threadFor(ctx: Context, address: String): Long =
-        runCatching { Telephony.Threads.getOrCreateThreadId(ctx, address) }.getOrDefault(0L)
+    fun mmsSender(ctx: Context, mmsId: Long): String? = runCatching {
+        ctx.contentResolver.query(Uri.parse("content://mms/$mmsId/addr"), arrayOf("address", "type"), "type=137", null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull()
+
+    fun threadFor(ctx: Context, addresses: List<String>): Long =
+        runCatching { Telephony.Threads.getOrCreateThreadId(ctx, addresses.toSet()) }.getOrDefault(0L)
+
+    fun threadFor(ctx: Context, address: String): Long = threadFor(ctx, listOf(address))
 
     const val ACTION_SENT = "com.rudysooo.messages.SENT"
     const val ACTION_DELIVERED = "com.rudysooo.messages.DELIVERED"
@@ -111,7 +199,25 @@ object Sms {
         return PendingIntent.getBroadcast(ctx, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    fun send(ctx: Context, address: String, text: String): Result<Unit> = runCatching {
+    /** Envoie un message : SMS simple, ou MMS s'il y a des pièces jointes ou plusieurs destinataires. */
+    fun sendMessage(ctx: Context, addresses: List<String>, text: String, attachments: List<Attachment> = emptyList()): Result<Unit> {
+        if (addresses.size == 1 && attachments.isEmpty()) return sendSms(ctx, addresses[0], text)
+        return runCatching {
+            require(addresses.isNotEmpty()) { "Aucun destinataire" }
+            require(isDefault(ctx)) { "Définis Messages comme appli SMS par défaut pour envoyer des MMS" }
+            val s = MmsSettings().apply {
+                setUseSystemSending(true)
+                setGroup(addresses.size > 1)
+                setDeliveryReports(Settings(ctx).deliveryReports)
+            }
+            Transaction.settings = s
+            val msg = Message(text.ifBlank { " " }, addresses.toTypedArray())
+            attachments.forEach { msg.addMedia(it.bytes, it.mime, it.name) }
+            Transaction(ctx, s).sendNewMessage(msg, threadFor(ctx, addresses))
+        }
+    }
+
+    fun sendSms(ctx: Context, address: String, text: String): Result<Unit> = runCatching {
         require(address.isNotBlank()) { "Numéro vide" }
         val sm = smsManager(ctx)
         val reports = Settings(ctx).deliveryReports
@@ -149,10 +255,32 @@ object Sms {
         }
     }
 
-    fun deleteMessages(ctx: Context, ids: Collection<Long>): Boolean {
-        if (!isDefault(ctx) || ids.isEmpty()) return false
+    fun markRead(ctx: Context, threadId: Long) {
+        if (!isDefault(ctx)) return
+        val v = ContentValues().apply { put("read", 1); put("seen", 1) }
+        runCatching { ctx.contentResolver.update(Telephony.Sms.CONTENT_URI, v, "thread_id=? AND read=0", arrayOf(threadId.toString())) }
+        runCatching {
+            ctx.contentResolver.update(
+                Telephony.Mms.CONTENT_URI, ContentValues().apply { put("read", 1); put("seen", 1) },
+                "thread_id=? AND read=0", arrayOf(threadId.toString()),
+            )
+        }
+    }
+
+    fun deleteThread(ctx: Context, threadId: Long): Boolean {
+        if (!isDefault(ctx)) return false
         return runCatching {
-            ctx.contentResolver.delete(Telephony.Sms.CONTENT_URI, "_id IN (${ids.joinToString(",")})", null)
+            ctx.contentResolver.delete(ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, threadId), null, null)
+        }.isSuccess
+    }
+
+    fun deleteMessages(ctx: Context, msgs: Collection<Msg>): Boolean {
+        if (!isDefault(ctx) || msgs.isEmpty()) return false
+        return runCatching {
+            val sms = msgs.filter { !it.mms }.map { it.id }
+            val mms = msgs.filter { it.mms }.map { it.id }
+            if (sms.isNotEmpty()) ctx.contentResolver.delete(Telephony.Sms.CONTENT_URI, "_id IN (${sms.joinToString(",")})", null)
+            if (mms.isNotEmpty()) ctx.contentResolver.delete(Telephony.Mms.CONTENT_URI, "_id IN (${mms.joinToString(",")})", null)
         }.isSuccess
     }
 
@@ -189,22 +317,4 @@ object Sms {
         }
         out.values.toList()
     }.getOrDefault(emptyList())
-
-    fun markRead(ctx: Context, threadId: Long) {
-        if (!isDefault(ctx)) return
-        runCatching {
-            ctx.contentResolver.update(
-                Telephony.Sms.CONTENT_URI,
-                ContentValues().apply { put(Telephony.Sms.READ, 1); put(Telephony.Sms.SEEN, 1) },
-                "thread_id=? AND read=0", arrayOf(threadId.toString()),
-            )
-        }
-    }
-
-    fun deleteThread(ctx: Context, threadId: Long): Boolean {
-        if (!isDefault(ctx)) return false
-        return runCatching {
-            ctx.contentResolver.delete(Telephony.Sms.CONTENT_URI, "thread_id=?", arrayOf(threadId.toString()))
-        }.isSuccess
-    }
 }
