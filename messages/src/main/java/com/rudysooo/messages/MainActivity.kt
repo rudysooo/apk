@@ -191,6 +191,14 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
 
 @Composable
 private fun PermissionScreen(onGrant: () -> Unit) {
+    val ctx = LocalContext.current
+    fun ok(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(ctx, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val smsOk = ok(Manifest.permission.READ_SMS) && ok(Manifest.permission.SEND_SMS)
+    val rows = listOf(
+        "Lire et envoyer des SMS" to smsOk,
+        "Recevoir des SMS" to ok(Manifest.permission.RECEIVE_SMS),
+        "Contacts" to ok(Manifest.permission.READ_CONTACTS),
+    )
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
@@ -200,21 +208,32 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         Text("Bienvenue dans Messages", fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Spacer(Modifier.height(10.dp))
         Text(
-            "Pour lire et envoyer tes SMS, l'appli a besoin d'accéder aux SMS, aux contacts et aux notifications.",
+            "Pour lire et envoyer tes SMS, l'appli a besoin d'accéder aux SMS et aux contacts.",
             textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
+        rows.forEach { (label, granted) ->
+            Text(
+                (if (granted) "✔  " else "✘  ") + label,
+                color = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.height(20.dp))
         Button(onGrant) { Text("Autoriser l'accès") }
-        val ctx = LocalContext.current
         TextButton({
             ctx.startActivity(
                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")),
             )
         }) { Text("Ouvrir les réglages de l'appli") }
-        Text(
-            "Si l'autorisation SMS est refusée : Réglages → Applications → Messages → ⋮ → « Autoriser les paramètres restreints », puis autorise les SMS.",
-            fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
+        if (!smsOk) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Les SMS sont bloqués par Android pour les applis installées hors du Play Store. " +
+                    "Va dans Réglages de l'appli → touche ⋮ en haut à droite → « Autoriser les paramètres restreints », " +
+                    "puis Autorisations → SMS → Autoriser, et reviens ici.",
+                fontSize = 13.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
