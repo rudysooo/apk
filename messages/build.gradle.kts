@@ -12,13 +12,16 @@ android {
         minSdk = 26
         // La bibliothèque MMS (2017) crée des PendingIntent sans FLAG_IMMUTABLE : incompatible avec targetSdk >= 31.
         targetSdk = 30
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Version optimisée : beaucoup plus fluide que la version de développement
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -27,6 +30,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    // Appli installée hors Play Store : la règle « targetSdk >= 33 » du Play Store ne s'applique pas
+    lint { disable += "ExpiredTargetSdkVersion" }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 }
@@ -40,4 +45,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.klinkerapps:android-smsmms:5.2.6")
+    // Installe les profils de compilation fournis par Compose : animations fluides dès le départ
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
 }

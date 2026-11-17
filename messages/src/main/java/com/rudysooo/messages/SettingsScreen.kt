@@ -30,8 +30,8 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
         modifier = Modifier.padding(24.dp, 20.dp, 24.dp, 8.dp),
     )
     Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        Modifier.padding(horizontal = 16.dp).fillMaxWidth().glass(RoundedCornerShape(24.dp)), shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
     ) { Column(Modifier.padding(vertical = 4.dp), content = content) }
 }
 
@@ -68,12 +68,13 @@ fun SettingsScreen(
     var number by remember { mutableStateOf("") }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.aurora(0.8f),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Réglages", fontWeight = FontWeight.Bold) },
                 navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Retour") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor()),
             )
         },
     ) { pad ->
@@ -127,6 +128,8 @@ fun SettingsScreen(
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                     }
                 }
+                SwitchRow("Fond animé", "Halos de couleur en mouvement (désactive pour économiser la batterie)",
+                    settings.animatedBg, settings::changeAnimatedBg)
                 Column(Modifier.padding(20.dp, 12.dp)) {
                     Text("Taille du texte", fontSize = 16.sp)
                     Spacer(Modifier.height(8.dp))

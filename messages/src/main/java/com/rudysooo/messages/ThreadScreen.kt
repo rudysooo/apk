@@ -102,6 +102,8 @@ fun ThreadScreen(
     var viewer by remember { mutableStateOf<MsgPart?>(null) }
     val listState = rememberLazyListState()
     val rows = remember(msgs) { buildRows(msgs) }
+    val lastOutUid = remember(msgs) { msgs.lastOrNull { !it.incoming }?.uid }
+    val canDelete = remember(version) { Sms.isDefault(ctx) }
     val scheduled = remember(schedTick, threadId) { Scheduler.forThread(ctx, threadId) }
 
     LaunchedEffect(version, threadId) {
@@ -167,7 +169,8 @@ fun ThreadScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.aurora(0.6f),
+        containerColor = Color.Transparent,
         topBar = {
             CenterAlignedTopAppBar(
                 navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBackIosNew, "Retour", Modifier.size(20.dp)) } },
@@ -225,7 +228,7 @@ fun ThreadScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = barColor()),
             )
         },
         bottomBar = {
@@ -263,8 +266,7 @@ fun ThreadScreen(
                 Row(Modifier.fillMaxWidth().padding(10.dp, 8.dp), verticalAlignment = Alignment.Bottom) {
                     val attachSrc = remember { MutableInteractionSource() }
                     Box(
-                        Modifier.padding(bottom = 5.dp).size(36.dp).pressScale(attachSrc, 0.85f).clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        Modifier.padding(bottom = 5.dp).size(36.dp).pressScale(attachSrc, 0.85f).glass(CircleShape, strong = true)
                             .combinedClickable(interactionSource = attachSrc, indication = null, onClick = {
                                 picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
                             }),
@@ -302,7 +304,7 @@ fun ThreadScreen(
                                 focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                                 focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                             ),
-                            modifier = Modifier.fillMaxWidth().border(0.8.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp)),
+                            modifier = Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp), strong = true),
                         )
                         if (text.length > 120 && !isGroup && attachments.isEmpty()) {
                             val parts = if (text.length <= 160) 1 else (text.length + 152) / 153
@@ -322,13 +324,13 @@ fun ThreadScreen(
                     is Row2.Day -> Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
                         Text(
                             r.label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape).padding(12.dp, 4.dp),
+                            modifier = Modifier.glass(CircleShape).padding(12.dp, 4.dp),
                         )
                     }
                     is Row2.M -> Bubble(
                         r.msg, r.first, r.last, isGroup, animateIn = r.msg.date > openedAt,
-                        isLastOutgoing = r.msg.uid == msgs.lastOrNull { !it.incoming }?.uid,
-                        canDelete = Sms.isDefault(ctx),
+                        isLastOutgoing = r.msg.uid == lastOutUid,
+                        canDelete = canDelete,
                         onRetry = { send(r.msg.body, emptyList()) { Sms.deleteMessages(ctx, listOf(r.msg)) } },
                         onDelete = { Sms.deleteMessages(ctx, listOf(r.msg)); onChanged() },
                         onImage = { viewer = it },
@@ -449,7 +451,11 @@ private fun Bubble(
                 if (m.body.isNotBlank()) Text(
                     m.body, color = fg, fontSize = 16.sp,
                     modifier = Modifier.widthIn(max = 300.dp).then(
-                        if (out && !m.failed) Modifier.background(outBrush, shape) else Modifier.background(bg, shape),
+                        when {
+                            out && !m.failed -> Modifier.background(outBrush, shape)
+                            m.failed -> Modifier.background(bg, shape)
+                            else -> Modifier.glass(shape, strong = true)
+                        },
                     ).padding(14.dp, 9.dp),
                 )
             }

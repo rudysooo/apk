@@ -17,6 +17,7 @@ class Settings(ctx: Context) {
     var textSize by mutableStateOf(sp.getInt("textSize", 1)); private set
     var notifications by mutableStateOf(sp.getBoolean("notifications", true)); private set
     var preview by mutableStateOf(sp.getBoolean("preview", true)); private set
+    var animatedBg by mutableStateOf(sp.getBoolean("animBg", true)); private set
     var deliveryReports by mutableStateOf(sp.getBoolean("delivery", false)); private set
     var pinned by mutableStateOf(sp.getStringSet("pinned", emptySet())!!.toSet()); private set
     var muted by mutableStateOf(sp.getStringSet("muted", emptySet())!!.toSet()); private set
@@ -30,6 +31,7 @@ class Settings(ctx: Context) {
     fun changeTextSize(v: Int) { textSize = v; sp.edit().putInt("textSize", v).apply() }
     fun changeNotifications(v: Boolean) { notifications = v; sp.edit().putBoolean("notifications", v).apply() }
     fun changePreview(v: Boolean) { preview = v; sp.edit().putBoolean("preview", v).apply() }
+    fun changeAnimatedBg(v: Boolean) { animatedBg = v; sp.edit().putBoolean("animBg", v).apply() }
     fun changeDeliveryReports(v: Boolean) { deliveryReports = v; sp.edit().putBoolean("delivery", v).apply() }
 
     fun isPinned(threadId: Long) = threadId.toString() in pinned

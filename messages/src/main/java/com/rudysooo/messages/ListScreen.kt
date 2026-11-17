@@ -15,6 +15,17 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -63,6 +74,7 @@ fun ListScreen(
     var deleteIds by remember { mutableStateOf<Set<Long>?>(null) }
     var showArchived by remember { mutableStateOf(false) }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val openedAt = remember { android.os.SystemClock.uptimeMillis() }
 
     LaunchedEffect(query) {
         if (query.isBlank()) { hits = emptyList(); return@LaunchedEffect }
@@ -84,8 +96,8 @@ fun ListScreen(
     fun askDelete(ids: Set<Long>) { deleteIds = ids }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.aurora().nestedScroll(scroll.nestedScrollConnection),
+        containerColor = Color.Transparent,
         topBar = {
             if (edit) {
                 TopAppBar(
@@ -101,7 +113,7 @@ fun ListScreen(
                             Text(if (selected.size == shown.size && shown.isNotEmpty()) "Aucun" else "Tout")
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor()),
                 )
             } else {
                 LargeTopAppBar(
@@ -123,8 +135,8 @@ fun ListScreen(
                     },
                     scrollBehavior = scroll,
                     colors = TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        scrolledContainerColor = MaterialTheme.colorScheme.background,
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = barColor(),
                     ),
                 )
             }
@@ -138,7 +150,7 @@ fun ListScreen(
                 val allPinned = on && selected.all { settings.isPinned(it) }
                 val allMuted = on && selected.all { settings.isMuted(it) }
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer).navigationBarsPadding().padding(vertical = 6.dp),
+                    Modifier.navigationBarsPadding().padding(12.dp, 8.dp).fillMaxWidth().glass(RoundedCornerShape(26.dp), strong = true).padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
                     ToolButton(Icons.Default.PushPin, if (allPinned) "Désépingler" else "Épingler", on) {
@@ -172,11 +184,10 @@ fun ListScreen(
                         },
                         singleLine = true, shape = CircleShape,
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                         ),
-                        modifier = Modifier.weight(1f).heightIn(min = 44.dp).onFocusChanged { searchFocused = it.isFocused },
+                        modifier = Modifier.weight(1f).heightIn(min = 44.dp).glass(CircleShape).onFocusChanged { searchFocused = it.isFocused },
                     )
                     AnimatedVisibility(
                         searchFocused || query.isNotEmpty(),
@@ -207,9 +218,10 @@ fun ListScreen(
                 }
             }
 
-            items(rest, key = { it.threadId }, contentType = { "conv" }) { c ->
+            itemsIndexed(rest, key = { _, c -> c.threadId }, contentType = { _, _ -> "conv" }) { index, c ->
                 SwipeRow(
-                    c, settings, edit, c.threadId in selected, Modifier.animateItemPlacement(spring(stiffness = Spring.StiffnessMediumLow)),
+                    c, settings, edit, c.threadId in selected, index, openedAt,
+                    Modifier.animateItemPlacement(spring(stiffness = Spring.StiffnessMediumLow)),
                     onPin = { settings.setPinned(listOf(c.threadId), !settings.isPinned(c.threadId)) },
                     onDelete = { askDelete(setOf(c.threadId)) },
                     onClick = { if (edit) selected = selected.toggle(c.threadId) else onOpen(c) },
@@ -292,33 +304,49 @@ private fun ToolButton(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 @Composable
 private fun PinnedTile(c: Conv, onClick: () -> Unit, onLong: () -> Unit) {
     val src = remember { MutableInteractionSource() }
+    val primary = MaterialTheme.colorScheme.primary
+    val unread = c.unread > 0
+    // Anneau dégradé qui tourne autour des conversations épinglées non lues
+    val angle by rememberInfiniteTransition(label = "ring").animateFloat(
+        0f, 360f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "angle",
+    )
+    val ringColors = remember(primary) { listOf(primary, primary.copy(alpha = 0.15f), Color.White.copy(alpha = 0.8f), primary) }
     Column(
-        Modifier.width(104.dp).padding(vertical = 6.dp).pressScale(src, 0.92f)
+        Modifier.width(104.dp).padding(vertical = 6.dp).pressScale(src, 0.9f)
             .combinedClickable(interactionSource = src, indication = null, onClick = onClick, onLongClick = onLong),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box {
-            Avatar(c.title, 76.dp)
-            if (c.unread > 0) Box(
-                Modifier.align(Alignment.TopStart).size(16.dp).clip(CircleShape).background(MaterialTheme.colorScheme.background).padding(2.dp)
-                    .clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-            )
-        }
+        Box(
+            Modifier.size(86.dp).drawBehind {
+                if (unread) rotate(angle) {
+                    drawCircle(Brush.sweepGradient(ringColors), radius = size.minDimension / 2 - 2.dp.toPx(), style = Stroke(3.dp.toPx()))
+                } else drawCircle(primary.copy(alpha = 0.25f), radius = size.minDimension / 2 - 2.dp.toPx(), style = Stroke(1.5.dp.toPx()))
+            },
+            contentAlignment = Alignment.Center,
+        ) { Avatar(c.title, 72.dp) }
         Spacer(Modifier.height(4.dp))
         Text(c.title, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            fontWeight = if (c.unread > 0) FontWeight.SemiBold else FontWeight.Normal)
+            fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium)
     }
 }
+
+private val CardShape = RoundedCornerShape(24.dp)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SwipeRow(
-    c: Conv, s: Settings, edit: Boolean, selected: Boolean, modifier: Modifier,
+    c: Conv, s: Settings, edit: Boolean, selected: Boolean, index: Int, openedAt: Long, modifier: Modifier,
     onPin: () -> Unit, onDelete: () -> Unit, onClick: () -> Unit, onLong: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
     val pin by rememberUpdatedState(onPin)
     val del by rememberUpdatedState(onDelete)
+    // Apparition en cascade à l'ouverture de l'écran
+    val stagger = remember { android.os.SystemClock.uptimeMillis() - openedAt < 700 && index < 14 }
+    val appear = remember { Animatable(if (stagger) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (stagger) { kotlinx.coroutines.delay(index * 40L); appear.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessLow)) }
+    }
     val state = rememberSwipeToDismissBoxState(confirmValueChange = { v ->
         when (v) {
             SwipeToDismissBoxValue.StartToEnd -> { haptic.performHapticFeedback(HapticFeedbackType.LongPress); pin() }
@@ -328,27 +356,28 @@ private fun SwipeRow(
         false // la ligne revient toujours à sa place
     })
     SwipeToDismissBox(
-        state = state, modifier = modifier,
+        state = state,
+        modifier = modifier.graphicsLayer {
+            val v = appear.value
+            alpha = v.coerceIn(0f, 1f); translationY = (1f - v) * 60f
+            val sc = 0.94f + 0.06f * v; scaleX = sc; scaleY = sc
+        },
         enableDismissFromStartToEnd = !edit, enableDismissFromEndToStart = !edit,
         backgroundContent = {
             val dir = state.dismissDirection
             val pinning = dir == SwipeToDismissBoxValue.StartToEnd
             val active = dir != SwipeToDismissBoxValue.Settled
             val scale by animateFloatAsState(
-                if (state.targetValue != SwipeToDismissBoxValue.Settled) 1.15f else 0.8f,
+                if (state.targetValue != SwipeToDismissBoxValue.Settled) 1.2f else 0.8f,
                 spring(dampingRatio = Spring.DampingRatioMediumBouncy), label = "swipeIcon",
             )
-            Box(
-                Modifier.fillMaxSize().background(
-                    when {
-                        !active -> MaterialTheme.colorScheme.background
-                        pinning -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.error
-                    },
-                ).padding(horizontal = 28.dp),
+            if (active) Box(
+                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 4.dp).clip(CardShape)
+                    .background(if (pinning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                    .padding(horizontal = 28.dp),
                 contentAlignment = if (pinning) Alignment.CenterStart else Alignment.CenterEnd,
             ) {
-                if (active) Icon(
+                Icon(
                     if (pinning) Icons.Default.PushPin else Icons.Default.Delete, null, tint = Color.White,
                     modifier = Modifier.graphicsLayer { scaleX = scale; scaleY = scale },
                 )
@@ -362,51 +391,55 @@ private fun SwipeRow(
 private fun ConvRow(c: Conv, s: Settings, edit: Boolean, selected: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val unread = c.unread > 0
     val src = remember { MutableInteractionSource() }
-    Box(Modifier.background(MaterialTheme.colorScheme.background)) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
-                .combinedClickable(interactionSource = src, indication = null, onClick = onClick, onLongClick = onLong)
-                .padding(end = 16.dp, top = 9.dp, bottom = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AnimatedVisibility(edit, enter = expandHorizontally(tween(260, easing = IosEasing)) + fadeIn(), exit = shrinkHorizontally(tween(220, easing = IosEasing)) + fadeOut()) {
-                Box(Modifier.padding(start = 16.dp).size(24.dp), contentAlignment = Alignment.Center) {
-                    val fill by animateFloatAsState(if (selected) 1f else 0f, spring(stiffness = Spring.StiffnessMedium), label = "check")
-                    Box(
-                        Modifier.size(24.dp).clip(CircleShape)
-                            .border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = fill)),
-                        contentAlignment = Alignment.Center,
-                    ) { if (selected) Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary) }
-                }
-            }
-            // Pastille bleue des messages non lus, à gauche comme sur iOS
-            Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) {
-                androidx.compose.animation.AnimatedVisibility(unread, enter = scaleIn(spring(Spring.DampingRatioMediumBouncy)), exit = scaleOut()) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                }
-            }
-            Avatar(c.title, 50.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold, fontSize = 16.sp,
-                    )
-                    if (s.isMuted(c.threadId)) Icon(Icons.Default.NotificationsOff, null, Modifier.size(13.dp).padding(end = 2.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(fmtList(c.date), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    c.snippet.replace('\n', ' '), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp,
-                    color = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    val primary = MaterialTheme.colorScheme.primary
+    val selFill by animateFloatAsState(if (selected) 0.22f else 0f, label = "sel")
+    Row(
+        Modifier.padding(horizontal = 12.dp, vertical = 4.dp).fillMaxWidth()
+            .pressScale(src, 0.97f)
+            .glass(CardShape)
+            .background(primary.copy(alpha = selFill))
+            .combinedClickable(interactionSource = src, indication = null, onClick = onClick, onLongClick = onLong)
+            .padding(end = 14.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AnimatedVisibility(edit, enter = expandHorizontally(tween(260, easing = IosEasing)) + fadeIn(), exit = shrinkHorizontally(tween(220, easing = IosEasing)) + fadeOut()) {
+            Box(Modifier.padding(start = 14.dp).size(24.dp), contentAlignment = Alignment.Center) {
+                val fill by animateFloatAsState(if (selected) 1f else 0f, spring(stiffness = Spring.StiffnessMedium), label = "check")
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape)
+                        .border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        .background(primary.copy(alpha = fill)),
+                    contentAlignment = Alignment.Center,
+                ) { if (selected) Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary) }
             }
         }
-        HorizontalDivider(
-            Modifier.align(Alignment.BottomEnd).fillMaxWidth().padding(start = 82.dp),
-            thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-        )
+        // Pastille des messages non lus
+        Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) {
+            androidx.compose.animation.AnimatedVisibility(unread, enter = scaleIn(spring(Spring.DampingRatioMediumBouncy)), exit = scaleOut()) {
+                Box(Modifier.size(9.dp).clip(CircleShape).background(primary))
+            }
+        }
+        Avatar(c.title, 50.dp)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    c.title, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontWeight = if (unread) FontWeight.ExtraBold else FontWeight.Bold, fontSize = 16.sp,
+                )
+                if (s.isMuted(c.threadId)) Icon(Icons.Default.NotificationsOff, null, Modifier.size(13.dp).padding(end = 2.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    fmtList(c.date), fontSize = 13.sp,
+                    color = if (unread) primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (unread) FontWeight.Bold else FontWeight.Medium,
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                c.snippet.replace('\n', ' '), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp,
+                color = if (unread) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+            )
+        }
     }
 }

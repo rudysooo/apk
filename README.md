@@ -15,4 +15,4 @@ Appli Android pour allumer (Wake-on-LAN) et éteindre un PC Windows depuis le t�
 Module `messages/` : remplaçant de l'appli SMS d'Android (conversations, recherche, épingler, sourdine, blocage,
 réponse rapide depuis la notification, accusés de réception, thèmes, archivage, envoi programmé,
 MMS et groupes via la bibliothèque com.klinkerapps:android-smsmms). Pas de RCS (impossible pour une appli tierce).
-APK : `dist/Messages.apk`.
+APK : `dist/Messages.apk` (version optimisée : `./gradlew :messages:assembleRelease`).

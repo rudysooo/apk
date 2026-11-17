@@ -36,7 +36,12 @@ import java.util.Locale
 /** Courbe de mouvement proche de celle d'iOS. */
 val IosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
-private fun fmt(pattern: String, ms: Long) = SimpleDateFormat(pattern, Locale.getDefault()).format(Date(ms))
+private val formats = HashMap<String, SimpleDateFormat>()
+
+/** Les formateurs de date sont coûteux à créer : on les garde. */
+private fun fmt(pattern: String, ms: Long): String = synchronized(formats) {
+    formats.getOrPut(pattern) { SimpleDateFormat(pattern, Locale.getDefault()) }.format(Date(ms))
+}
 
 fun fmtTime(ms: Long) = fmt("HH:mm", ms)
 

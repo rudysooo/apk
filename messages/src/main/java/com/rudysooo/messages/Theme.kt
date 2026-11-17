@@ -12,6 +12,29 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+
+@OptIn(ExperimentalTextApi::class)
+private fun jakarta(w: Int) = Font(R.font.jakarta, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+
+val AppFont = FontFamily(jakarta(400), jakarta(500), jakarta(600), jakarta(700), jakarta(800))
+
+private fun TextStyle.f() = copy(fontFamily = AppFont)
+
+private val AppTypography = Typography().let { t ->
+    Typography(
+        t.displayLarge.f(), t.displayMedium.f(), t.displaySmall.f(),
+        t.headlineLarge.f(), t.headlineMedium.f(), t.headlineSmall.f(),
+        t.titleLarge.f(), t.titleMedium.f(), t.titleSmall.f(),
+        t.bodyLarge.f(), t.bodyMedium.f(), t.bodySmall.f(),
+        t.labelLarge.f(), t.labelMedium.f(), t.labelSmall.f(),
+    )
+}
 
 /** 0 = couleurs du système (Material You, Android 12+). */
 val Accents = listOf(0, 0xFF0A84FF, 0xFF30D158, 0xFFFF9F0A, 0xFFFF375F, 0xFFBF5AF2, 0xFF64D2FF).map { it.toInt() }
@@ -58,6 +81,7 @@ fun MessagesTheme(settings: Settings, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalDensity provides Density(base.density, base.fontScale * settings.textScale)) {
         MaterialTheme(
             colorScheme = colors,
+            typography = AppTypography,
             shapes = Shapes(
                 small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(18.dp), large = RoundedCornerShape(28.dp),
             ),

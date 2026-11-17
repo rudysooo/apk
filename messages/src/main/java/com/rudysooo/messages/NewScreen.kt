@@ -46,12 +46,13 @@ fun NewScreen(contactsGranted: Boolean, onBack: () -> Unit, onPick: (addresses: 
     fun add(c: Contact) { chosen = chosen + c; query = "" }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        modifier = Modifier.aurora(0.8f),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Nouvelle conversation", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Retour") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = barColor()),
             )
         },
         floatingActionButton = {
@@ -83,11 +84,10 @@ fun NewScreen(contactsGranted: Boolean, onBack: () -> Unit, onPick: (addresses: 
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (looksLikeNumber) add(Contact(q, q)) }),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                 ),
-                modifier = Modifier.fillMaxWidth().padding(16.dp, 8.dp),
+                modifier = Modifier.padding(16.dp, 8.dp).fillMaxWidth().glass(CircleShape),
             )
             if (chosen.size == 1) {
                 Text(

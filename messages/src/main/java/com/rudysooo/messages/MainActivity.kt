@@ -162,14 +162,17 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
     BackHandler(enabled = screen != Screen.List) { screen = Screen.List }
 
     if (!smsGranted) {
-        PermissionScreen(onDefault = ::requestDefault) {
+        val clock = rememberAuroraClock(settings.animatedBg)
+        CompositionLocalProvider(LocalAurora provides clock) { PermissionScreen(onDefault = ::requestDefault) {
             val p = mutableListOf(Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_CONTACTS)
             if (Build.VERSION.SDK_INT >= 33) p += Manifest.permission.POST_NOTIFICATIONS
             permLauncher.launch(p.toTypedArray())
-        }
+        } }
         return
     }
 
+    val clock = rememberAuroraClock(settings.animatedBg)
+    CompositionLocalProvider(LocalAurora provides clock) {
     AnimatedContent(
         targetState = screen,
         transitionSpec = {
@@ -210,6 +213,7 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
             )
         }
     }
+    }
 }
 
 private fun depth(s: Screen) = if (s == Screen.List) 0 else 1
@@ -225,7 +229,7 @@ private fun PermissionScreen(onDefault: () -> Unit, onGrant: () -> Unit) {
         "Contacts" to ok(Manifest.permission.READ_CONTACTS),
     )
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        Modifier.fillMaxSize().aurora().padding(32.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(Icons.Default.Chat, null, Modifier.size(84.dp), tint = MaterialTheme.colorScheme.primary)
