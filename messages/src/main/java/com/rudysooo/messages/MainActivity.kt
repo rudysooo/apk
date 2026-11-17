@@ -103,6 +103,7 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
         version++
     }
     val roleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        smsGranted = Sms.hasSmsPermissions(ctx)
         defaultTick++; version++
     }
     fun requestDefault() {
@@ -156,7 +157,7 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
     BackHandler(enabled = screen != Screen.List) { screen = Screen.List }
 
     if (!smsGranted) {
-        PermissionScreen {
+        PermissionScreen(onDefault = ::requestDefault) {
             val p = mutableListOf(Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_CONTACTS)
             if (Build.VERSION.SDK_INT >= 33) p += Manifest.permission.POST_NOTIFICATIONS
             permLauncher.launch(p.toTypedArray())
@@ -190,7 +191,7 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
 }
 
 @Composable
-private fun PermissionScreen(onGrant: () -> Unit) {
+private fun PermissionScreen(onDefault: () -> Unit, onGrant: () -> Unit) {
     val ctx = LocalContext.current
     fun ok(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(ctx, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
     val smsOk = ok(Manifest.permission.READ_SMS) && ok(Manifest.permission.SEND_SMS)
@@ -220,7 +221,11 @@ private fun PermissionScreen(onGrant: () -> Unit) {
             )
         }
         Spacer(Modifier.height(20.dp))
-        Button(onGrant) { Text("Autoriser l'accès") }
+        if (!smsOk) {
+            Button(onDefault) { Text("Définir comme appli SMS par défaut") }
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(onGrant) { Text("Autoriser l'accès") }
+        } else Button(onGrant) { Text("Autoriser l'accès") }
         TextButton({
             ctx.startActivity(
                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")),
@@ -229,9 +234,8 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         if (!smsOk) {
             Spacer(Modifier.height(8.dp))
             Text(
-                "Les SMS sont bloqués par Android pour les applis installées hors du Play Store. " +
-                    "Va dans Réglages de l'appli → touche ⋮ en haut à droite → « Autoriser les paramètres restreints », " +
-                    "puis Autorisations → SMS → Autoriser, et reviens ici.",
+                "Android bloque les SMS pour les applis installées hors du Play Store. Touche « Définir comme appli SMS par défaut » " +
+                    "et accepte : cela débloque l'accès. (Sinon : Réglages de l'appli → ⋮ → « Autoriser les paramètres restreints ».)",
                 fontSize = 13.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
