@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "PcRemote"
-include(":app")
+include(":app", ":messages")
