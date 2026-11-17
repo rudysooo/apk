@@ -55,6 +55,8 @@ class FakeDesktop:
     def cursor(self): return QPointF(self.cursor_pos)
     def mouse_down(self): return self.down
     def fullscreen_app(self): return False
+    fg = 0
+    def foreground(self): return self.fg
     def apply_style(self, widget): pass
     def set_passthrough(self, widget, on): pass
     def keep_on_top(self, widget): pass
@@ -169,6 +171,12 @@ class WinDesktop:
 
     def mouse_down(self):
         return bool(self.u.GetAsyncKeyState(0x01) & 0x8000)
+
+    def foreground(self):
+        try:
+            return int(self.u.GetForegroundWindow() or 0)
+        except Exception:
+            return 0
 
     def fullscreen_app(self):
         try:
@@ -307,12 +315,28 @@ class Brain:
         self.hovering = False
         self.events = []             # ("poke",) ("land",) ("takeoff",) ("scan", hwnd)
         self.scan_next = 10.0
+        self.known = None            # fenêtres déjà vues (pour réagir aux nouvelles)
+        self.fg = 0
+        self.last_cursor = QPointF(-1, -1)
+        self.idle_time = 0.0         # secondes sans bouger la souris
         self.refresh()
 
     # -- données du bureau
     def refresh(self):
         self.windows = self.d.windows() if self.use_windows else []
         self.segs = compute_platforms(self.windows, self.hover + 4, 110 * self.S) if self.use_windows else []
+        if not self.use_windows:
+            return
+        now = {w.hwnd for w in self.windows}
+        fg = self.d.foreground()
+        free = self.mode in ("fly", "perch") and not self.sleeping and self.press is None
+        if self.known is not None and free:
+            new = [w for w in self.windows if w.hwnd not in self.known and w.cls not in WinDesktop.TASKBAR]
+            if new and random.random() < 0.7:
+                self.go_perch(new[0].hwnd, curious=True)      # une fenêtre s'ouvre : il va voir
+            elif fg and fg != self.fg and fg in now and random.random() < 0.8 and fg != self.perch_hwnd:
+                self.go_perch(fg)                             # tu changes de fenêtre : il te suit
+        self.known, self.fg = now, fg
 
     def seg_for(self, hwnd, x):
         for s in self.segs:
@@ -325,10 +349,16 @@ class Brain:
         self.target, self.intent = QPointF(x, y), "hover"
         self._takeoff()
 
-    def go_perch(self):
-        if not self.segs:
+    def go_perch(self, hwnd=None, curious=False):
+        cands = [s for s in self.segs if s.hwnd == hwnd] if hwnd else []
+        if not cands:
+            # il préfère la fenêtre active (celle que tu utilises), puis les autres
+            fgs = [s for s in self.segs if s.hwnd == self.fg and s.hwnd != self.perch_hwnd]
+            others = [s for s in self.segs if s.hwnd != self.perch_hwnd] or self.segs
+            cands = fgs if (fgs and random.random() < 0.5) else others
+        if not cands:
             return self.go_roam()
-        s = random.choice(self.segs)
+        s = max(cands, key=lambda s: s.x2 - s.x1) if curious else random.choice(cands)
         x = random.uniform(s.x1 + self.R, max(s.x1 + self.R, s.x2 - self.R))
         self.target = QPointF(x, s.y - self.hover)
         self.intent, self.perch_hwnd = "perch", s.hwnd
@@ -367,6 +397,10 @@ class Brain:
             if self.mode == "perch" and not self.seg_for(self.perch_hwnd, self.pos.x()):
                 self.mode = "fall"                      # la fenêtre a bougé, été cachée ou fermée
                 self.vel = QPointF(0, 40 * S)
+        if math.hypot(cur.x() - self.last_cursor.x(), cur.y() - self.last_cursor.y()) > 3:
+            self.idle_time, self.last_cursor = 0.0, QPointF(cur)
+        else:
+            self.idle_time += dt
         self._mouse(cur, dt)
         if self.mode == "drag":
             self._drag(cur, dt)
@@ -446,7 +480,7 @@ class Brain:
         if dist > 1:
             desired = d * (min(maxv, dist * 4.2) / dist)
             # trajectoire en arc, plus vivante qu'une ligne droite
-            perp = QPointF(-d.y() / dist, d.x() / dist) * (math.sin(self.time * 2.4) * min(dist, 500 * S) * 0.35)
+            perp = QPointF(-d.y() / dist, d.x() / dist) * (math.sin(self.time * 1.7) * min(dist, 500 * S) * 0.16)
             desired = desired + perp
             self.vel = self.vel + (desired - self.vel) * (1 - math.exp(-7 * dt))
         self.pos = self.pos + self.vel * dt
@@ -454,7 +488,7 @@ class Brain:
             r = self.d.rect_of(self.perch_hwnd)
             if r is not None and self.seg_for(self.perch_hwnd, self.pos.x()):
                 self.mode, self.perch_t = "perch", 0.0
-                self.dwell = random.uniform(7, 22)
+                self.dwell = random.uniform(14, 40)
                 self.walk_dir = 0.0
                 self.vel = QPointF(0, 0)
                 self.squash, self.squash_t = 0.7, 0.0
@@ -464,18 +498,20 @@ class Brain:
             self.dwell -= dt
             if self.dwell <= 0:
                 self._decide()
+            elif self.segs and self.time % 9 < dt:
+                self.dwell = min(self.dwell, 0.8)    # il n'aime pas rester en l'air trop longtemps
         # petit flottement quand il est en l'air
         self.pos = QPointF(self.pos.x(), self.pos.y() + math.sin(self.time * 2.1) * 8 * S * dt)
 
     def _decide(self):
         r = random.random()
-        if r < 0.62 and self.segs:
+        if r < 0.7 and self.segs:
             self.go_perch()
-        elif r < 0.82:
+        elif r < 0.85:
             self.go_roam()
         else:
-            self.follow_cursor(random.uniform(4, 8))
-        self.dwell = random.uniform(2, 5)
+            self.follow_cursor(random.uniform(4, 7))
+        self.dwell = random.uniform(3, 7)
 
     def _perch(self, dt):
         S = self.S
@@ -497,7 +533,7 @@ class Brain:
         if not self.sleeping:
             self.dwell -= dt
             if self.dwell <= 0 or self.intent == "cursor":
-                self.dwell = random.uniform(2, 5)
+                self.dwell = random.uniform(3, 7)
                 self.intent = "hover"
                 self._decide()
             elif self.time > self.scan_next:
@@ -531,7 +567,7 @@ class Brain:
                     if r is not None:
                         self.mode, self.perch_hwnd = "perch", s.hwnd
                         self.perch_dx, self.perch_t = self.pos.x() - r.left(), 0.0
-                        self.dwell, self.walk_dir = random.uniform(6, 18), 0.0
+                        self.dwell, self.walk_dir = random.uniform(12, 30), 0.0
                         self.vel = QPointF(0, 0)
                         self.squash, self.squash_t = 0.8, 0.0
                         self.events.append(("land", s.hwnd))
@@ -592,6 +628,10 @@ class Overlay(QWidget):
         self.bracket_alpha = 0.0
         self.prev_rects = []
         self.passthrough = True
+        self.fx_hwnd = 0
+        self.auto_slept = False
+        self.last_full = 0.0
+        self.last_region = QRegion()
         self.hidden_for_fullscreen = False
         self.clock = QElapsedTimer()
         self.timer = QTimer(self)
@@ -629,6 +669,15 @@ class Overlay(QWidget):
             self.top_t = 2.0
             self.d.keep_on_top(self)
         b.update(dt)
+        # veille automatique après 3 minutes sans bouger la souris, réveil dès qu'on la touche
+        if self.state == "idle" and b.idle_time > 180 and not self.auto_slept:
+            self.auto_slept = True
+            self.set_state("sleep")
+        elif self.auto_slept and b.idle_time < 1.0:
+            self.auto_slept = False
+            if self.state == "sleep":
+                self.set_state("idle")
+                self.ripples.append((time.time(), 0.8))
         # réactions aux événements du comportement
         for ev in b.events:
             if ev[0] == "poke":
@@ -698,8 +747,13 @@ class Overlay(QWidget):
             tgt = 0.0
         self.level = lerp(self.level, clamp(tgt, 0, 1), 1 - math.exp(-14 * dt))
         # accolades sur la fenêtre où il est posé
-        want = 1.0 if (self.brain.mode == "perch" and self.state != "sleep") else 0.0
+        perched = self.brain.mode == "perch" and self.state != "sleep"
+        if perched:
+            self.fx_hwnd = self.brain.perch_hwnd
+        want = 1.0 if perched else 0.0
         self.bracket_alpha = lerp(self.bracket_alpha, want, 1 - math.exp(-4 * dt))
+        if not perched and self.bracket_alpha < 0.01:
+            self.fx_hwnd = 0
         self.ripples = [r for r in self.ripples if time.time() - r[0] < 1.6]
         if self.scan and t - self.scan[1] > 1.5:
             self.scan = None
@@ -708,22 +762,23 @@ class Overlay(QWidget):
     def visual_rects(self):
         b, R = self.brain, self.brain.R
         c = b.pos
-        e = R * 3.6
+        e = R * 4.8                       # halo, ondes et égaliseur compris
         rs = [QRect(int(c.x() - e), int(c.y() - e), int(2 * e), int(2 * e))]
         if b.trail:
             xs = [p[0] for p in b.trail]
             ys = [p[1] for p in b.trail]
             rs.append(QRect(int(min(xs) - e), int(min(ys) - e), int(max(xs) - min(xs) + 2 * e), int(max(ys) - min(ys) + 2 * e)))
         if self.bubble:
-            rs.append(self.bubble_rect().toAlignedRect().adjusted(-12, -12, 12, 12))
-        if b.mode == "perch" and self.bracket_alpha > 0.01:
-            r = self.d.rect_of(b.perch_hwnd)
+            rs.append(self.bubble_rect().toAlignedRect().adjusted(-14, -14, 14, 14))
+        if self.fx_hwnd and self.bracket_alpha > 0.005:
+            r = self.d.rect_of(self.fx_hwnd)
             if r is not None:
-                L = int(70 * self.S)
+                L = int(34 * self.S)
                 for x, y in ((r.left(), r.top()), (r.right() - L, r.top()), (r.left(), r.bottom() - L), (r.right() - L, r.bottom() - L)):
                     rs.append(QRect(x - 8, y - 8, L + 16, L + 16))
+                rs.append(QRect(r.left() - 8, r.top() - 8, r.width() + 16, 16))          # liseré le long du bord
                 if self.scan:
-                    rs.append(QRect(r.left() - 4, r.top() - 4, r.width() + 8, r.height() + 8))
+                    rs.append(QRect(r.left() - 8, r.top() - 8, r.width() + 16, r.height() + 16))
         return rs
 
     def invalidate(self):
@@ -732,6 +787,11 @@ class Overlay(QWidget):
         for r in self.prev_rects + new:
             reg = reg.united(r.translated(-self.bounds.topLeft()).adjusted(-4, -4, 4, 4))
         self.prev_rects = new
+        now = time.time()
+        if now - self.last_full > 4.0 and not getattr(self, "_nofull", False):        # filet de sécurité : un nettoyage complet de temps en temps
+            self.last_full = now
+            reg = QRegion(self.rect())
+        self.last_region = reg
         self.update(reg)
 
     def paintEvent(self, ev):
@@ -763,9 +823,9 @@ class Overlay(QWidget):
 
     def draw_window_fx(self, p):
         b, S = self.brain, self.S
-        if b.mode != "perch" or self.bracket_alpha < 0.01:
+        if not self.fx_hwnd or self.bracket_alpha < 0.01:
             return
-        r = self.d.rect_of(b.perch_hwnd)
+        r = self.d.rect_of(self.fx_hwnd)
         if r is None:
             return
         a = self.bracket_alpha
@@ -785,7 +845,7 @@ class Overlay(QWidget):
         p.setPen(QPen(QBrush(g), 2.0 * S))
         p.drawLine(QPointF(r.left(), r.top()), QPointF(r.right(), r.top()))
         # balayage « scanner »
-        if self.scan and self.scan[0] == b.perch_hwnd:
+        if self.scan and self.scan[0] == self.fx_hwnd:
             u = clamp((b.time - self.scan[1]) / 1.5, 0, 1)
             y = r.top() + (r.height()) * (1 - (1 - u) ** 2)
             h = 46 * S

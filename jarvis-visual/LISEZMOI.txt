@@ -9,7 +9,9 @@ Un orbe animé qui vit par-dessus tout ton écran :
   - tu peux l'ATTRAPER (clic gauche maintenu dessus), le DÉPLACER et le LANCER :
     il rebondit et retombe sur une fenêtre ou la barre des tâches,
   - un simple CLIC sur lui le fait réagir (« Oui ? »),
-  - il se cache tout seul quand une appli est en plein écran (jeu, vidéo).
+  - il se cache tout seul quand une appli est en plein écran (jeu, vidéo),
+  - il va voir les nouvelles fenêtres qui s'ouvrent et préfère celle que tu utilises,
+  - il s'endort si tu ne touches pas la souris pendant 3 minutes, et se réveille dès que tu la bouges.
 Tout le reste de l'écran reste cliquable : l'orbe ne bloque rien sauf quand ta souris est sur lui.
 
 LANCER
