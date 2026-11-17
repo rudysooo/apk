@@ -26,6 +26,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -110,6 +113,20 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
         roleLauncher.launch(i)
     }
 
+    // Revérifie les autorisations au retour depuis les réglages d'Android
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val o = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) {
+                smsGranted = Sms.hasSmsPermissions(ctx)
+                contactsGranted = androidx.core.content.ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                defaultTick++
+            }
+        }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o) }
+    }
+
     // Rafraîchit la liste dès que la base SMS change
     DisposableEffect(smsGranted) {
         if (!smsGranted) return@DisposableEffect onDispose {}
@@ -188,5 +205,16 @@ private fun PermissionScreen(onGrant: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Button(onGrant) { Text("Autoriser l'accès") }
+        val ctx = LocalContext.current
+        TextButton({
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")),
+            )
+        }) { Text("Ouvrir les réglages de l'appli") }
+        Text(
+            "Si l'autorisation SMS est refusée : Réglages → Applications → Messages → ⋮ → « Autoriser les paramètres restreints », puis autorise les SMS.",
+            fontSize = 12.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
