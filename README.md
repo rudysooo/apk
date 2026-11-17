@@ -16,3 +16,7 @@ Module `messages/` : remplaçant de l'appli SMS d'Android (conversations, recher
 réponse rapide depuis la notification, accusés de réception, thèmes, archivage, envoi programmé,
 MMS et groupes via la bibliothèque com.klinkerapps:android-smsmms). Pas de RCS (impossible pour une appli tierce).
 APK : `dist/Messages.apk` (version optimisée : `./gradlew :messages:assembleRelease`).
+
+## Jarvis (visuel de bureau Windows)
+Dossier `jarvis-visual/` : orbe animé par-dessus le bureau, qui se pose sur les fenêtres et réagit à la souris.
+Visuel uniquement, pilotable par commandes UDP locales. Zip prêt à l'emploi : `dist/jarvis-visual.zip`.

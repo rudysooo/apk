@@ -1,0 +1,50 @@
+JARVIS - VISUEL DE BUREAU (Windows 10 / 11)
+===========================================
+
+Un orbe animé qui vit par-dessus tout ton écran :
+  - il vole sur tous tes écrans et se pose sur le haut de tes fenêtres,
+  - il suit les fenêtres quand tu les déplaces (et tombe si tu les fermes ou les caches),
+  - des repères lumineux entourent la fenêtre où il est posé, avec un balayage « scanner »,
+  - il regarde ta souris, réagit quand tu t'en approches,
+  - tu peux l'ATTRAPER (clic gauche maintenu dessus), le DÉPLACER et le LANCER :
+    il rebondit et retombe sur une fenêtre ou la barre des tâches,
+  - un simple CLIC sur lui le fait réagir (« Oui ? »),
+  - il se cache tout seul quand une appli est en plein écran (jeu, vidéo).
+Tout le reste de l'écran reste cliquable : l'orbe ne bloque rien sauf quand ta souris est sur lui.
+
+LANCER
+  Double-clique sur lancer.bat. Au premier lancement il installe PySide6 (Python 3.9 ou plus requis).
+  Options : lancer.bat --taille 1.5      (plus gros)
+            lancer.bat --sans-fenetres   (ne monte pas sur les fenêtres)
+  QUITTER : icône Jarvis dans la zone de notification (en bas à droite, près de l'horloge)
+            -> clic droit -> Quitter. Ce menu permet aussi de tester les états.
+
+ÉTATS VISUELS (pour brancher ton vrai Jarvis)
+  idle       cyan      au repos
+  listening  bleu      écoute : ondes qui s'élargissent
+  thinking   orange    réfléchit : anneaux rapides et arc qui tourne
+  speaking   vert      parle : égaliseur circulaire + bulle de texte
+  alert      rouge     alerte : pulsation
+  sleep      gris      veille : œil fermé, il se pose bas
+
+COMMANDES (texte envoyé en UDP à 127.0.0.1, port 8790)
+  state <nom>        change l'état
+  say <texte>        affiche une bulle (effet machine à écrire) et passe en « parle »
+  level <0..1>       niveau audio réel pour l'égaliseur (level -1 = simulé)
+  perch              va se poser sur une fenêtre au hasard
+  roam               se promène
+  follow [secondes]  suit la souris
+  goto <x> <y>       va à ce point
+  color #rrggbb      impose une couleur (color auto = couleurs des états)
+  quit               ferme le visuel
+
+  Exemple : python jarvis_send.py state thinking
+  Depuis ton code :
+      import socket
+      s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+      s.sendto(b"say Bonjour", ("127.0.0.1", 8790))
+
+NOTES
+  - Ça n'agit QUE sur l'apparence : l'orbe ne clique pas, ne tape rien et ne touche pas à tes fenêtres.
+  - Les commandes ne sont acceptées que depuis ton propre PC (127.0.0.1).
+  - Si le port 8790 est pris, lance : lancer.bat --port 8791 (et envoie les commandes à ce port).
