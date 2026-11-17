@@ -57,5 +57,15 @@ object Attachments {
     }
 
     /** Décode une pièce jointe d'un MMS reçu, pour l'affichage. */
-    fun loadPart(ctx: Context, uri: Uri, max: Int): Bitmap? = runCatching { decode(ctx, uri, max) }.getOrNull()
+    private val cache = object : android.util.LruCache<String, Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
+
+    fun cached(uri: Uri, max: Int): Bitmap? = cache.get("$uri@$max")
+
+    fun loadPart(ctx: Context, uri: Uri, max: Int): Bitmap? {
+        val key = "$uri@$max"
+        cache.get(key)?.let { return it }
+        return runCatching { decode(ctx, uri, max) }.getOrNull()?.also { cache.put(key, it) }
+    }
 }

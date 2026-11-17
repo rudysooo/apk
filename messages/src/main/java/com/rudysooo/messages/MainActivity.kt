@@ -18,6 +18,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
@@ -131,8 +133,11 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
     // Rafraîchit la liste dès que la base SMS change
     DisposableEffect(smsGranted) {
         if (!smsGranted) return@DisposableEffect onDispose {}
-        val obs = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) { version++ }
+        val handler = Handler(Looper.getMainLooper())
+        val bump = Runnable { version++ }
+        val obs = object : ContentObserver(handler) {
+            // Regroupe les rafales de changements pour ne recharger qu'une fois
+            override fun onChange(selfChange: Boolean) { handler.removeCallbacks(bump); handler.postDelayed(bump, 250) }
         }
         runCatching { ctx.contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, obs) }
         onDispose { ctx.contentResolver.unregisterContentObserver(obs) }
@@ -165,30 +170,49 @@ private fun App(settings: Settings, open: OpenReq?, onOpenHandled: () -> Unit) {
         return
     }
 
-    when (val s = screen) {
-        Screen.List -> ListScreen(
-            settings, convs, loaded, isDefault,
-            onRequestDefault = ::requestDefault,
-            onOpen = { screen = Screen.Thread(it.threadId, it.addresses.ifEmpty { listOf(it.title) }, it.title) },
-            onOpenHit = { screen = Screen.Thread(it.threadId, listOf(it.address), it.name ?: it.address) },
-            onNew = {
-                if (!contactsGranted) permLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
-                screen = Screen.New
-            },
-            onSettings = { screen = Screen.Settings },
-            onChanged = { version++ },
-        )
-        Screen.New -> NewScreen(contactsGranted, onBack = { screen = Screen.List }) { numbers, title ->
-            screen = Screen.Thread(Sms.threadFor(ctx, numbers), numbers, title)
+    AnimatedContent(
+        targetState = screen,
+        transitionSpec = {
+            val push = depth(targetState) > depth(initialState)
+            val offset = tween<androidx.compose.ui.unit.IntOffset>(380, easing = IosEasing)
+            val t = if (push) {
+                (slideInHorizontally(offset) { it } + fadeIn(tween(160))) togetherWith
+                    (slideOutHorizontally(offset) { -it / 3 } + fadeOut(tween(380)))
+            } else {
+                (slideInHorizontally(offset) { -it / 3 } + fadeIn(tween(380))) togetherWith
+                    (slideOutHorizontally(offset) { it } + fadeOut(tween(160, delayMillis = 220)))
+            }
+            t.apply { targetContentZIndex = if (push) 1f else -1f }
+        },
+        contentKey = { if (it is Screen.Thread) "t${it.threadId}" else it::class },
+        label = "screens",
+    ) { s ->
+        when (s) {
+            Screen.List -> ListScreen(
+                settings, convs, loaded,
+                onOpen = { screen = Screen.Thread(it.threadId, it.addresses.ifEmpty { listOf(it.title) }, it.title) },
+                onOpenHit = { screen = Screen.Thread(it.threadId, listOf(it.address), it.name ?: it.address) },
+                onNew = {
+                    if (!contactsGranted) permLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS))
+                    screen = Screen.New
+                },
+                onSettings = { screen = Screen.Settings },
+                onChanged = { version++ },
+            )
+            Screen.New -> NewScreen(contactsGranted, onBack = { screen = Screen.List }) { numbers, title ->
+                screen = Screen.Thread(Sms.threadFor(ctx, numbers), numbers, title)
+            }
+            Screen.Settings -> SettingsScreen(settings, isDefault, ::requestDefault) { screen = Screen.List }
+            is Screen.Thread -> ThreadScreen(
+                settings, version, s.threadId, s.addresses, s.title, s.draft,
+                onBack = { screen = Screen.List },
+                onChanged = { version++ },
+            )
         }
-        Screen.Settings -> SettingsScreen(settings, isDefault, ::requestDefault) { screen = Screen.List }
-        is Screen.Thread -> ThreadScreen(
-            settings, version, s.threadId, s.addresses, s.title, s.draft,
-            onBack = { screen = Screen.List },
-            onChanged = { version++ },
-        )
     }
 }
+
+private fun depth(s: Screen) = if (s == Screen.List) 0 else 1
 
 @Composable
 private fun PermissionScreen(onDefault: () -> Unit, onGrant: () -> Unit) {

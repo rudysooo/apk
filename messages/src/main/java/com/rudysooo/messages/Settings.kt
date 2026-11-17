@@ -12,7 +12,7 @@ class Settings(ctx: Context) {
     /** 0 = suivre le système, 1 = clair, 2 = sombre */
     var themeMode by mutableStateOf(sp.getInt("theme", 0)); private set
     /** 0 = couleurs du système (Material You), sinon couleur ARGB */
-    var accent by mutableStateOf(sp.getInt("accent", 0xFF2B6CF6.toInt())); private set
+    var accent by mutableStateOf(sp.getInt("accent", 0xFF0A84FF.toInt())); private set
     /** 0 = petit, 1 = normal, 2 = grand */
     var textSize by mutableStateOf(sp.getInt("textSize", 1)); private set
     var notifications by mutableStateOf(sp.getBoolean("notifications", true)); private set

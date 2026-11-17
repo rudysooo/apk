@@ -1,6 +1,8 @@
 package com.rudysooo.messages
 
 import android.Manifest
+import android.app.role.RoleManager
+import androidx.compose.runtime.Immutable
 import android.app.PendingIntent
 import android.content.ContentUris
 import android.content.ContentValues
@@ -17,6 +19,7 @@ import com.klinker.android.send_message.Message
 import com.klinker.android.send_message.Transaction
 import com.klinker.android.send_message.Settings as MmsSettings
 
+@Immutable
 data class Conv(
     val threadId: Long,
     val addresses: List<String>,
@@ -30,11 +33,13 @@ data class Conv(
     val isGroup get() = addresses.size > 1
 }
 
+@Immutable
 class MsgPart(val id: Long, val mime: String, val name: String) {
     val uri: Uri get() = Uri.parse("content://mms/part/$id")
     val isImage get() = mime.startsWith("image/")
 }
 
+@Immutable
 /** type : 1 reçu, 2 envoyé, 4 en cours d'envoi, 5 échec */
 class Msg(
     val uid: String,
@@ -65,7 +70,11 @@ object Sms {
             ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED
         }
 
-    fun isDefault(ctx: Context) = Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    fun isDefault(ctx: Context): Boolean {
+        if (Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName) return true
+        return Build.VERSION.SDK_INT >= 29 &&
+            runCatching { ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_SMS) }.getOrDefault(false)
+    }
 
     fun displayName(ctx: Context, address: String): String? {
         if (address.isBlank()) return null

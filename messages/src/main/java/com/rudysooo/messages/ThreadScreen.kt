@@ -9,6 +9,21 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -73,6 +88,8 @@ fun ThreadScreen(
     onChanged: () -> Unit,
 ) {
     val ctx = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val openedAt = remember { System.currentTimeMillis() - 2000 }
     val scope = rememberCoroutineScope()
     val isGroup = addresses.size > 1
     val address = addresses.firstOrNull() ?: ""
@@ -94,7 +111,13 @@ fun ThreadScreen(
         }
         Notifier.cancel(ctx, threadId)
     }
-    LaunchedEffect(rows.size) { if (rows.isNotEmpty()) listState.scrollToItem(rows.lastIndex) }
+    var firstScroll by remember { mutableStateOf(true) }
+    LaunchedEffect(rows.size) {
+        if (rows.isNotEmpty()) {
+            if (firstScroll) { listState.scrollToItem(rows.lastIndex); firstScroll = false }
+            else listState.animateScrollToItem(rows.lastIndex)
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris ->
         scope.launch {
@@ -146,17 +169,15 @@ fun ThreadScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBack, "Retour") } },
+            CenterAlignedTopAppBar(
+                navigationIcon = { IconButton(onBack) { Icon(Icons.Default.ArrowBackIosNew, "Retour", Modifier.size(20.dp)) } },
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Avatar(title, 38.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
-                            if (isGroup) Text("${addresses.size} participants", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            else if (title != address) Text(address, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Avatar(title, 34.dp)
+                        Text(
+                            if (isGroup) "$title" else title, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                            modifier = Modifier.widthIn(max = 180.dp), overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
                     }
                 },
                 actions = {
@@ -239,22 +260,49 @@ fun ThreadScreen(
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(8.dp, 8.dp), verticalAlignment = Alignment.Bottom) {
-                    IconButton(
-                        { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
-                        Modifier.size(48.dp),
-                    ) { Icon(Icons.Default.AddPhotoAlternate, "Joindre", tint = MaterialTheme.colorScheme.primary) }
+                Row(Modifier.fillMaxWidth().padding(10.dp, 8.dp), verticalAlignment = Alignment.Bottom) {
+                    val attachSrc = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier.padding(bottom = 5.dp).size(36.dp).pressScale(attachSrc, 0.85f).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .combinedClickable(interactionSource = attachSrc, indication = null, onClick = {
+                                picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                            }),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Default.Add, "Joindre", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Spacer(Modifier.width(8.dp))
+                    val canSend = text.isNotBlank() || attachments.isNotEmpty()
                     Column(Modifier.weight(1f)) {
                         TextField(
                             value = text, onValueChange = { text = it },
                             placeholder = { Text(if (isGroup || attachments.isNotEmpty()) "Message MMS" else "Message texte") },
-                            maxLines = 6, shape = RoundedCornerShape(26.dp),
+                            maxLines = 6, shape = RoundedCornerShape(22.dp),
+                            trailingIcon = {
+                                // La flèche d'envoi apparaît avec un petit rebond dès qu'il y a du contenu
+                                AnimatedVisibility(
+                                    canSend,
+                                    enter = scaleIn(spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium)) + fadeIn(),
+                                    exit = scaleOut() + fadeOut(),
+                                ) {
+                                    val sendSrc = remember { MutableInteractionSource() }
+                                    // Appui court : envoyer. Appui long : programmer l'envoi.
+                                    Box(
+                                        Modifier.padding(end = 4.dp).size(30.dp).pressScale(sendSrc, 0.82f).clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary)
+                                            .combinedClickable(
+                                                interactionSource = sendSrc, indication = null,
+                                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); doSend() },
+                                                onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); schedule() },
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Icon(Icons.Default.ArrowUpward, "Envoyer", Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                                }
+                            },
                             colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
                                 focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                             ),
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().border(0.8.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(22.dp)),
                         )
                         if (text.length > 120 && !isGroup && attachments.isEmpty()) {
                             val parts = if (text.length <= 160) 1 else (text.length + 152) / 153
@@ -263,20 +311,6 @@ fun ThreadScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, top = 2.dp),
                             )
                         }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    val canSend = text.isNotBlank() || attachments.isNotEmpty()
-                    // Appui court : envoyer. Appui long : programmer l'envoi.
-                    Box(
-                        Modifier.size(52.dp).clip(CircleShape)
-                            .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .combinedClickable(enabled = canSend, onClick = ::doSend, onLongClick = ::schedule),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.Send, "Envoyer",
-                            tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }
@@ -292,7 +326,7 @@ fun ThreadScreen(
                         )
                     }
                     is Row2.M -> Bubble(
-                        r.msg, r.first, r.last, isGroup,
+                        r.msg, r.first, r.last, isGroup, animateIn = r.msg.date > openedAt,
                         isLastOutgoing = r.msg.uid == msgs.lastOrNull { !it.incoming }?.uid,
                         canDelete = Sms.isDefault(ctx),
                         onRetry = { send(r.msg.body, emptyList()) { Sms.deleteMessages(ctx, listOf(r.msg)) } },
@@ -335,7 +369,7 @@ fun ThreadScreen(
 private fun PartView(part: MsgPart, shape: RoundedCornerShape, fg: Color, onImage: (MsgPart) -> Unit) {
     val ctx = LocalContext.current
     if (part.isImage) {
-        val bmp by produceState<Bitmap?>(null, part.id) { value = withContext(Dispatchers.IO) { Attachments.loadPart(ctx, part.uri, 700) } }
+        val bmp by produceState<Bitmap?>(Attachments.cached(part.uri, 700), part.id) { if (value == null) value = withContext(Dispatchers.IO) { Attachments.loadPart(ctx, part.uri, 700) } }
         val b = bmp
         if (b != null) Image(
             b.asImageBitmap(), null,
@@ -362,7 +396,7 @@ private fun PartView(part: MsgPart, shape: RoundedCornerShape, fg: Color, onImag
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Bubble(
-    m: Msg, first: Boolean, last: Boolean, isGroup: Boolean, isLastOutgoing: Boolean, canDelete: Boolean,
+    m: Msg, first: Boolean, last: Boolean, isGroup: Boolean, animateIn: Boolean, isLastOutgoing: Boolean, canDelete: Boolean,
     onRetry: () -> Unit, onDelete: () -> Unit, onImage: (MsgPart) -> Unit,
 ) {
     val ctx = LocalContext.current
@@ -384,8 +418,20 @@ private fun Bubble(
         out -> MaterialTheme.colorScheme.onPrimary
         else -> MaterialTheme.colorScheme.onSurface
     }
+    val anim = remember { Animatable(if (animateIn) 0f else 1f) }
+    LaunchedEffect(Unit) { if (animateIn) anim.animateTo(1f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow)) }
+    val primary = MaterialTheme.colorScheme.primary
+    val outBrush = Brush.verticalGradient(listOf(
+        Color((primary.red + 0.12f).coerceAtMost(1f), (primary.green + 0.12f).coerceAtMost(1f), (primary.blue + 0.12f).coerceAtMost(1f)), primary))
     Column(
-        Modifier.fillMaxWidth().padding(top = if (first) 8.dp else 2.dp),
+        Modifier.fillMaxWidth().padding(top = if (first) 8.dp else 2.dp).graphicsLayer {
+            val v = anim.value
+            alpha = v.coerceIn(0f, 1f)
+            val sc = 0.8f + 0.2f * v
+            scaleX = sc; scaleY = sc
+            translationY = (1f - v) * 48f
+            transformOrigin = TransformOrigin(if (out) 1f else 0f, 1f)
+        },
         horizontalAlignment = if (out) Alignment.End else Alignment.Start,
     ) {
         if (isGroup && !out && first) {
@@ -402,7 +448,9 @@ private fun Bubble(
                 m.parts.forEach { PartView(it, imgShape, fg, onImage) }
                 if (m.body.isNotBlank()) Text(
                     m.body, color = fg, fontSize = 16.sp,
-                    modifier = Modifier.widthIn(max = 300.dp).background(bg, shape).padding(14.dp, 9.dp),
+                    modifier = Modifier.widthIn(max = 300.dp).then(
+                        if (out && !m.failed) Modifier.background(outBrush, shape) else Modifier.background(bg, shape),
+                    ).padding(14.dp, 9.dp),
                 )
             }
             DropdownMenu(open, { open = false }) {

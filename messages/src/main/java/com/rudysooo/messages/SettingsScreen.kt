@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.sp
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(
-        title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
+        title.uppercase(), fontWeight = FontWeight.Medium, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(24.dp, 20.dp, 24.dp, 8.dp),
     )
     Card(
