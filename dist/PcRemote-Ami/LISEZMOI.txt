@@ -1,0 +1,41 @@
+PC REMOTE - Allumer et eteindre ton PC depuis ton telephone Android
+===================================================================
+
+Ca marche sur ton reseau local : le telephone doit etre sur le meme Wi-Fi que la box
+du PC (pas en 4G, pas en reseau invite). Le PC doit etre branche en CABLE ETHERNET.
+
+ETAPE 1 - Sur le telephone
+   Envoie-toi PcRemote.apk et installe-le (autorise les "sources inconnues" si Android le demande).
+
+ETAPE 2 - Sur le PC Windows
+   Double-clique sur Installer.bat (accepte la fenetre administrateur).
+   A la fin, tu obtiens ton Nom, ta MAC, ton IP, le Broadcast et un Jeton.
+   Ils sont aussi dans le fichier PcRemote-infos.txt sur le Bureau.
+
+ETAPE 3 - BIOS (une seule fois, a faire a la main)
+   Redemarre le PC et appuie sur Suppr ou F2 pour entrer dans le BIOS.
+   Cherche l'option de reveil par le reseau, selon la carte mere :
+     - ASRock : Advanced > ACPI Configuration > "PCIE Devices Power On" = Enabled
+     - Autres : "Wake on LAN", "Power On By PCI-E" ou "Resume By PCI-E Device" = Enabled
+   Si tu vois "ErP / EuP Ready" ou "Deep Sleep", mets-les sur Disabled.
+   Sauvegarde avec F10.
+
+ETAPE 4 - Fixer l'IP du PC (conseille)
+   Si l'IP du PC change, l'appli ne le retrouve plus.
+   Le plus simple : dans l'interface de ta box, "reserver" l'IP du PC (bail DHCP statique).
+   Sinon, dans Windows : Parametres > Reseau > Ethernet > Attribution d'IP > Manuel.
+
+ETAPE 5 - Dans l'appli
+   Ouvre PC Remote > Ajouter. Entre le Nom, la MAC et l'IP donnes a l'etape 2.
+   Puis sur la carte du PC : "Configurer l'extinction" > colle le Jeton > Enregistrer.
+   Eteins le PC avec "Arreter" (pas Redemarrer), attends 30 secondes, puis appuie sur Allumer.
+
+BONUS - Boutons dans le panneau rapide (centre de controle)
+   Dans l'appli, touche l'icone en haut a droite (a cote du "?") : Android propose d'ajouter
+   "Allumer PC" et "Eteindre PC". Sinon : glisse le panneau vers le bas > crayon (modifier)
+   > ajoute les deux boutons. Ils agissent sur le premier PC de la liste.
+
+Pour retirer l'agent du PC : double-clique sur Desinstaller.bat.
+
+Securite : l'agent n'accepte que les appareils de ton reseau local et seulement avec le Jeton.
+Ne partage pas ton Jeton.
